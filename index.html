@@ -73,6 +73,7 @@
     <span class="stat">🌊 웨이브 <span id="wave">0</span></span>
     <span class="stat">⭐ <span id="score">0</span></span>
     <span class="spacer"></span>
+    <button id="codeBtn">🔑 코드</button>
     <button id="pauseBtn">⏸ 일시정지</button>
     <button id="speedBtn">▶ x1</button>
     <button id="waveBtn" class="primary">다음 웨이브 ▶</button>
@@ -158,6 +159,7 @@ const ENEMIES = {
 
 // ===== 게임 상태 =====
 let S;
+let infiniteGold = false; // 치트 코드 '방탄유리'
 function resetGame() {
   S = {
     gold: 180, lives: 20, wave: 0, score: 0,
@@ -586,8 +588,9 @@ function renderInfo() {
 }
 let lastHud = '';
 function updateHUD() {
+  if (infiniteGold) S.gold = 999999;
   $('lives').textContent = S.lives;
-  $('gold').textContent = S.gold;
+  $('gold').textContent = infiniteGold ? '∞' : S.gold;
   $('wave').textContent = S.wave;
   $('score').textContent = S.score;
   $('waveBtn').disabled = S.waveActive || S.over;
@@ -612,6 +615,17 @@ $('speedBtn').onclick = () => {
   $('speedBtn').textContent = `▶ x${S.speed}`;
 };
 $('waveBtn').onclick = startWave;
+$('codeBtn').onclick = () => {
+  const code = (prompt('치트 코드를 입력하세요') || '').trim();
+  if (!code) return;
+  if (code === '방탄유리') {
+    infiniteGold = true; lastHud = '';
+    addText(W / 2, H / 2, '💰 돈 무한 활성화!', '#facc15', 28, 1.8);
+  } else {
+    addText(W / 2, H / 2, '잘못된 코드', '#f87171', 22, 1.2);
+  }
+  updateHUD(); renderShop(); renderInfo();
+};
 
 function getBest() { try { return +localStorage.getItem('defence-best') || 0; } catch { return 0; } }
 function setBest(v) { try { localStorage.setItem('defence-best', v); } catch {} }
