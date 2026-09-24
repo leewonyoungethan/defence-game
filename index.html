@@ -38,6 +38,11 @@
   button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 0 #1e1b4b; }
   button:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 #1e1b4b; }
   button:disabled { opacity: .45; cursor: default; }
+  select {
+    background: #fff; color: #1e1b4b; border: 3px solid #1e1b4b; border-radius: 12px;
+    padding: 4px 6px; font-size: 16px; font-family: inherit; cursor: pointer; box-shadow: 0 4px 0 #1e1b4b;
+  }
+  select.on { background: #4ade80; color: #14532d; }
   button.on { background: #4ade80; color: #14532d; }
   button.primary { background: #f472b6; color: #fff; text-shadow: 1px 1px 0 #9d174d; }
   canvas { display: block; width: 100%; touch-action: none; border-left: 3px solid #fff; border-right: 3px solid #fff; }
@@ -88,7 +93,7 @@
     <span class="spacer"></span>
     <button id="codeBtn">🔑 코드</button>
     <button id="pauseBtn">⏸</button>
-    <button id="speedBtn">x1</button>
+    <select id="speedSel" title="배속 (F 키)"></select>
     <button id="autoBtn">🔁 연속 OFF</button>
     <button id="waveBtn" class="primary">다음 웨이브 ▶</button>
   </div>
@@ -98,7 +103,7 @@
     <div id="desc">타워를 골라 풀밭에 설치하세요!</div>
     <div id="info"></div>
   </div>
-  <div class="help">타워 선택 → 풀밭 클릭으로 설치 · 설치된 타워 클릭 → 업그레이드/판매 · 우클릭/ESC 취소<br>단축키: 1~0 타워 · Space 웨이브 · U 업그레이드 · P 일시정지 · F 배속(x1→x2→x3→x5→x10)</div>
+  <div class="help">타워 선택 → 풀밭 클릭으로 설치 · 설치된 타워 클릭 → 업그레이드/판매 · 우클릭/ESC 취소<br>단축키: 1~0 타워 · Space 웨이브 · U 업그레이드 · P 일시정지 · F 배속(최대 x100)</div>
 </div>
 
 <div id="overlay"><div class="box">
@@ -512,7 +517,6 @@ function update(dt) {
     if (S.autoTimer <= 0) startWave();
   }
   if (S.lives <= 0 && !S.over) { S.lives = 0; S.over = true; gameOver(); }
-  updateHUD();
 }
 
 function findTarget(t, range, mode, groundOnly) {
@@ -1215,15 +1219,15 @@ function togglePause() {
   $('pauseBtn').textContent = S.paused ? '▶' : '⏸';
 }
 $('pauseBtn').onclick = togglePause;
-const SPEEDS = [1, 2, 3, 5, 10];
-function cycleSpeed() {
-  S.speed = SPEEDS[(SPEEDS.indexOf(S.speed) + 1) % SPEEDS.length];
-  $('speedBtn').textContent = `x${S.speed}`;
-  $('speedBtn').classList.toggle('on', S.speed > 1);
+const SPEEDS = [1, 2, 3, 5, 10, 20, 50, 100];
+$('speedSel').innerHTML = SPEEDS.map(v => `<option value="${v}">⏩ x${v}</option>`).join('');
+function setSpeed(v) {
+  S.speed = v;
+  $('speedSel').value = v;
+  $('speedSel').classList.toggle('on', v > 1);
 }
-$('speedBtn').onclick = () => {
-  cycleSpeed();
-};
+function cycleSpeed() { setSpeed(SPEEDS[(SPEEDS.indexOf(S.speed) + 1) % SPEEDS.length]); }
+$('speedSel').onchange = () => { setSpeed(+$('speedSel').value); $('speedSel').blur(); };
 $('waveBtn').onclick = startWave;
 function syncAutoBtn() {
   $('autoBtn').textContent = S.autoWave ? '🔁 연속 ON' : '🔁 연속 OFF';
@@ -1260,13 +1264,13 @@ function victory() {
   const best = Math.max(getBest(), S.score); setBest(best);
   S.banner = { text: 'VICTORY!', sub: '🏆 100 웨이브 클리어!', age: 0, life: 3, color: '#fde047' };
   setTimeout(() => showOverlay('🏆 승리!', `100 웨이브를 모두 막아냈어요!<br>남은 생명 <b>${S.lives}</b> · 점수 <b>${S.score}</b> · 최고 점수 <b>${best}</b>`, '다시 하기', () => {
-    resetGame(); $('speedBtn').textContent = 'x1'; $('speedBtn').classList.remove('on'); $('pauseBtn').textContent = '⏸'; syncAutoBtn();
+    resetGame(); setSpeed(1); $('pauseBtn').textContent = '⏸'; syncAutoBtn();
   }), 1500);
 }
 function gameOver() {
   const best = Math.max(getBest(), S.score); setBest(best);
   showOverlay('💀 게임 오버', `웨이브 <b>${S.wave}</b>까지 버텼어요!<br>점수 <b>${S.score}</b> · 최고 점수 <b>${best}</b>`, '다시 하기', () => {
-    resetGame(); $('speedBtn').textContent = 'x1'; $('speedBtn').classList.remove('on'); $('pauseBtn').textContent = '⏸'; syncAutoBtn();
+    resetGame(); setSpeed(1); $('pauseBtn').textContent = '⏸'; syncAutoBtn();
   });
 }
 
@@ -1275,7 +1279,10 @@ let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  if (!S.paused && !S.over) for (let i = 0; i < S.speed; i++) update(dt);
+  if (!S.paused && !S.over) {
+    for (let i = 0; i < S.speed && !S.over; i++) update(dt);
+    updateHUD();
+  }
   else if (S.over && S.banner) { S.banner.age += dt; if (S.banner.age > S.banner.life) S.banner = null; }
   draw();
   requestAnimationFrame(loop);
