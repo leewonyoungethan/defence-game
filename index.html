@@ -154,7 +154,7 @@ const TOWER_LIST = [
   { id: 'frost', name: '얼음탑', icon: '❄️', cost: 80, color: '#38bdf8', desc: '맞은 적을 느리게 만듦', kind: 'proj', bullet: 'ice',
     s: { dmg: [5, 9, 15], range: [110, 125, 140], rate: [.8, .7, .6], slow: [.5, .4, .3], slowDur: [1.5, 2, 2.5], speed: 460 } },
   { id: 'laser', name: '레이저탑', icon: '⚡', cost: 150, color: '#c084fc', desc: '긴 사거리의 강력한 광선', kind: 'beam',
-    s: { dmg: [70, 130, 240], range: [190, 215, 240], rate: [1.8, 1.6, 1.4] } },
+    s: { dmg: [90, 200, 500], range: [190, 220, 260], rate: [1.5, 1.3, 1.1] } },
   { id: 'poison', name: '독탑', icon: '🧪', cost: 90, color: '#a3e635', desc: '독으로 계속 피해를 줌', kind: 'proj', bullet: 'poison',
     s: { dmg: [4, 7, 12], range: [120, 130, 145], rate: [.9, .8, .7], poison: [12, 25, 50], poisonDur: 3.5, speed: 420 } },
   { id: 'lightning', name: '번개탑', icon: '🌩️', cost: 130, color: '#fde047', desc: '여러 적에게 튀는 연쇄 번개', kind: 'chain',
@@ -164,7 +164,7 @@ const TOWER_LIST = [
   { id: 'mine', name: '금광', icon: '⛏️', cost: 120, color: '#eab308', desc: '웨이브를 깰 때마다 골드 획득', kind: 'mine',
     s: { income: [30, 55, 90], range: 0 } },
   { id: 'sniper', name: '저격탑', icon: '🎯', cost: 200, color: '#94a3b8', desc: '체력이 가장 많은 적을 초장거리 저격', kind: 'beam', target: 'strong',
-    s: { dmg: [150, 300, 600], range: [320, 380, 450], rate: [3, 2.7, 2.4] } },
+    s: { dmg: [200, 450, 1000], range: [320, 380, 450], rate: [2.5, 2.2, 1.8] } },
   { id: 'gatling', name: '기관총탑', icon: '🔫', cost: 120, color: '#64748b', desc: '엄청 빠른 연사', kind: 'proj', bullet: 'bullet',
     s: { dmg: [4, 7, 12], range: [110, 120, 130], rate: [.12, .1, .08], speed: 700 } },
   { id: 'missile', name: '미사일탑', icon: '🚀', cost: 220, color: '#f43f5e', desc: '유도 미사일 대폭발', kind: 'proj', bullet: 'missile', shake: 4,
@@ -314,11 +314,11 @@ function buildWave(n) {
   }
   // 5웨이브마다 보스, 뒤로 갈수록 보스 수 증가, 100웨이브는 최종 보스전
   if (n % 5 === 0) for (let i = 0; i < 1 + Math.floor(n / 25); i++) q.push('boss');
-  if (n === MAX_WAVE) for (let i = 0; i < 4; i++) q.push('boss');
+  if (n === MAX_WAVE) for (let i = 0; i < 2; i++) q.push('boss');
   return q;
 }
-// 체력 배율: 초반엔 완만하게, 후반엔 가파르게 (100웨이브 ≈ 75배)
-const hpScale = n => 1 + 0.15 * (n - 1) + 0.006 * (n - 1) * (n - 1);
+// 체력 배율: 초반엔 완만하게, 후반엔 가파르게 (100웨이브 ≈ 30배)
+const hpScale = n => 1 + 0.12 * (n - 1) + 0.0018 * (n - 1) * (n - 1);
 
 function startWave() {
   if (S.waveActive || S.over || S.wave >= MAX_WAVE) return;
