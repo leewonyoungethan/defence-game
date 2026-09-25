@@ -86,7 +86,7 @@
 <h1>🏰 디펜스 게임 ✨</h1>
 <div id="wrap">
   <div id="hud" class="panel">
-    <span class="stat">❤️ <span id="lives">20</span></span>
+    <span class="stat">❤️ <span id="lives">30</span></span>
     <span class="stat">💰 <span id="gold">0</span></span>
     <span class="stat">🌊 <span id="wave">0</span> / 100</span>
     <span class="stat">⭐ <span id="score">0</span></span>
@@ -285,7 +285,7 @@ let infiniteGold = false; // 치트 코드 '방탄유리'
 let enemyId = 0;
 function resetGame() {
   S = {
-    gold: 200, lives: 20, wave: 0, score: 0,
+    gold: 300, lives: 30, wave: 0, score: 0,
     towers: [], enemies: [], bullets: [], particles: [], texts: [], beams: [],
     spawnQueue: [], spawnTimer: 0, waveActive: false,
     selectedType: null, selectedTower: null, hover: null,
@@ -317,8 +317,8 @@ function buildWave(n) {
   if (n === MAX_WAVE) for (let i = 0; i < 2; i++) q.push('boss');
   return q;
 }
-// 체력 배율: 초반엔 완만하게, 후반엔 가파르게 (100웨이브 ≈ 30배)
-const hpScale = n => 1 + 0.12 * (n - 1) + 0.0018 * (n - 1) * (n - 1);
+// 체력 배율: 초반엔 완만하게, 후반엔 가파르게 (100웨이브 ≈ 19배)
+const hpScale = n => 1 + 0.1 * (n - 1) + 0.0008 * (n - 1) * (n - 1);
 
 function startWave() {
   if (S.waveActive || S.over || S.wave >= MAX_WAVE) return;
@@ -346,7 +346,7 @@ function spawnEnemy(type, dist = 0) {
     flying: !!d.flying, armor: d.armor || 0, heal: d.heal, split: d.split, ghost: d.ghost, regen: d.regen || 0, dash: d.dash,
     abilityT: 1 + Math.random() * 2, hidden: false, dashT: 0,
     hp, maxHp: hp, speed: d.speed * (1 + Math.min(S.wave, 30) * 0.01),
-    reward: Math.round(d.reward * (1 + S.wave * 0.04)), r: d.r, color: d.color,
+    reward: Math.round(d.reward * 1.5 * (1 + S.wave * 0.04)), r: d.r, color: d.color,
     light: mix(d.color, '#ffffff', .6), dark: mix(d.color, '#000000', .3),
     slowMul: 1, slowTime: 0, stunTime: 0, poison: 0, poisonTime: 0, hitFlash: 0, marked: false,
   });
