@@ -4,17 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>디펜스 게임</title>
+<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { color-scheme: dark; }
   body {
     background: linear-gradient(180deg, #1e1b4b 0%, #312e81 60%, #4c1d95 100%);
     color: #f8fafc; min-height: 100vh;
     font-family: "Jua", "Malgun Gothic", sans-serif;
     display: flex; flex-direction: column; align-items: center;
-    padding: 12px; user-select: none;
+    padding-block: 12px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    background-color: #1e1b4b; user-select: none;
   }
+  button:focus-visible, select:focus-visible, input:focus-visible, .shop:focus-visible { outline: 3px solid #fde047; outline-offset: 2px; }
+  .rankNote { font-size: 13px; color: #64748b; display: block; margin-top: 4px; }
+  .rankMsg { font-size: 14px; color: #b91c1c; margin-top: 8px; }
   h1 {
     font-size: 32px; margin-bottom: 8px; letter-spacing: 2px; font-weight: 400;
     color: #fff; text-shadow: 3px 3px 0 #db2777, -1px -1px 0 #1e1b4b, 0 0 18px rgba(244,114,182,.6);
@@ -1258,15 +1266,24 @@ $('autoBtn').onclick = () => {
   if (!S.autoWave) S.autoTimer = 0;
 };
 $('codeBtn').onclick = () => {
-  const code = (prompt('치트 코드를 입력하세요') || '').trim();
-  if (!code) return;
-  if (code === '방탄유리') {
-    infiniteGold = true; lastHud = '';
-    S.banner = { text: 'CHEAT ON', sub: '💰 돈 무한 활성화!', age: 0, life: 1.8, color: '#fde047' };
-  } else {
-    addText(W / 2, H / 2, '잘못된 코드', '#f87171', 26, 1.2);
-  }
-  updateHUD(); renderShop(); renderInfo();
+  if (S.over) return;
+  const wasPaused = S.paused;
+  S.paused = true;
+  showOverlay('🔑 치트 코드', '<div class="nameRow"><input id="codeInput" maxlength="20" placeholder="코드를 입력하세요"></div>', '확인', () => {
+    S.paused = wasPaused;
+    const code = ($('codeInput').value || '').trim();
+    if (!code) return;
+    if (code === '방탄유리') {
+      infiniteGold = true; lastHud = '';
+      S.banner = { text: 'CHEAT ON', sub: '💰 돈 무한 활성화!', age: 0, life: 1.8, color: '#fde047' };
+    } else {
+      addText(W / 2, H / 2, '잘못된 코드', '#f87171', 26, 1.2);
+    }
+    updateHUD(); renderShop(); renderInfo();
+  });
+  const inp = $('codeInput');
+  setTimeout(() => inp.focus(), 50);
+  inp.onkeydown = ev => { ev.stopPropagation(); if (ev.key === 'Enter') $('ovBtn').click(); };
 };
 
 function getBest() { try { return +localStorage.getItem('defence-best') || 0; } catch { return 0; } }
@@ -1277,51 +1294,120 @@ function showOverlay(title, text, btn, onClick) {
   $('ovBtn').onclick = () => { $('overlay').style.display = 'none'; onClick(); };
   $('overlay').style.display = 'flex';
 }
-// ================= 순위 (이 브라우저에 저장, 상위 10명) =================
+// ================= 순위 =================
+// claude.ai 아티팩트에서 열면 친구들과 함께 보는 온라인 순위(db),
+// 그 밖(GitHub Pages 등)에서는 이 브라우저에만 저장되는 순위.
 const RANK_KEY = 'defence-ranking';
-function getRanking() { try { return JSON.parse(localStorage.getItem(RANK_KEY)) || []; } catch { return []; } }
-function saveRanking(list) { try { localStorage.setItem(RANK_KEY, JSON.stringify(list)); } catch {} }
+function getLocalRanking() { try { return JSON.parse(localStorage.getItem(RANK_KEY)) || []; } catch { return []; } }
+function saveLocalRanking(list) { try { localStorage.setItem(RANK_KEY, JSON.stringify(list)); } catch {} }
 function getName() { try { return localStorage.getItem('defence-name') || ''; } catch { return ''; } }
 function setName(v) { try { localStorage.setItem('defence-name', v); } catch {} }
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const sortRank = (a, b) => b.score - a.score || b.wave - a.wave || a.time - b.time;
 
-function addRanking(entry) {
-  const list = getRanking();
-  list.push(entry);
-  list.sort((a, b) => b.score - a.score || b.wave - a.wave || a.time - b.time);
-  const top = list.slice(0, 10);
-  saveRanking(top);
-  return top.indexOf(entry);   // 10위 밖이면 -1
+const online = { db: null, uid: null, list: null, status: 'off', canWrite: true };
+let localHi = -1;   // 방금 등록한 로컬 기록의 순위 칸
+
+async function initOnline() {
+  if (!window.claude || !window.claude.use) return;
+  online.status = 'loading';
+  refreshRankViews();
+  try {
+    const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+    const uid = user ? await user.id() : null;
+    if (!db || !uid) { online.status = 'off'; refreshRankViews(); return; }
+    online.db = db; online.uid = uid;
+    const can = await user.can('data.write');
+    // 'scores/{self}'는 Contributor 이상이 쓸 수 있음. can()이 null이면 일단 시도해 봄
+    if (can === false) online.canWrite = false;
+    const timer = setTimeout(() => { if (online.status === 'loading') { online.status = 'slow'; refreshRankViews(); } }, 10000);
+    db.collection('scores').orderBy('score', 'desc').limit(100).onSnapshot(snap => {
+      online.list = snap.docs.map(d => ({ ...d.data(), uid: d.id }))
+        .filter(r => typeof r.score === 'number' && typeof r.name === 'string')
+        .sort(sortRank);
+      if (!snap.metadata.fromCache) { clearTimeout(timer); online.status = 'on'; }
+      refreshRankViews();
+    }, () => { clearTimeout(timer); online.status = 'error'; refreshRankViews(); });
+  } catch { online.status = 'off'; refreshRankViews(); }
 }
-function rankingTable(list, hi = -1, limit = 10) {
+const isOnline = () => !!online.db;
+const currentRanking = () => isOnline() ? (online.list || []) : getLocalRanking();
+
+function rankingTable(limit = 10) {
+  const list = currentRanking();
+  if (isOnline() && !online.list) {
+    return `<table class="rank"><tr><td class="empty">${online.status === 'error' ? '온라인 순위를 불러오지 못했어요' : online.status === 'slow' ? '온라인 순위를 아직 못 불러왔어요. 연결을 확인해 주세요' : '온라인 순위 불러오는 중...'}</td></tr></table>`;
+  }
   if (!list.length) return '<table class="rank"><tr><td class="empty">아직 기록이 없어요. 첫 1등이 되어 보세요!</td></tr></table>';
   const medal = i => ['🥇', '🥈', '🥉'][i] || (i + 1);
-  const rows = list.slice(0, limit).map((r, i) => `<tr class="${i === hi ? 'me' : ''}">
-    <td>${medal(i)}</td><td class="nm">${esc(r.name)}${r.cheat ? ' <span title="돈 무한 코드 사용">💰∞</span>' : ''}</td>
-    <td>${r.win ? '🏆 100' : r.wave}</td><td><b>${r.score.toLocaleString()}</b></td></tr>`).join('');
+  const rows = list.slice(0, limit).map((r, i) => {
+    const me = isOnline() ? r.uid === online.uid : i === localHi;
+    return `<tr class="${me ? 'me' : ''}">
+    <td>${medal(i)}</td><td class="nm">${esc(r.name)}${me && isOnline() ? ' (나)' : ''}${r.cheat ? ' <span title="돈 무한 코드 사용">💰∞</span>' : ''}</td>
+    <td>${r.win ? '🏆 100' : Number(r.wave) || 0}</td><td><b>${(Number(r.score) || 0).toLocaleString()}</b></td></tr>`;
+  }).join('');
   return `<table class="rank"><tr><th>순위</th><th>이름</th><th>웨이브</th><th>점수</th></tr>${rows}</table>`;
 }
-function restartGame() { resetGame(); setSpeed(1); $('pauseBtn').textContent = '⏸'; syncAutoBtn(); }
+const rankWhere = () => isOnline() ? '🌐 온라인 순위 · 친구들과 함께 봐요 (한 사람당 최고 기록)' : '💾 이 기기(브라우저)에만 저장된 순위예요';
+function rankBlock(limit) { return `<div class="rankWrap" data-limit="${limit}">${rankingTable(limit)}</div>`; }
+function refreshRankViews() {
+  document.querySelectorAll('.rankWrap').forEach(el => { el.innerHTML = rankingTable(+el.dataset.limit); });
+  document.querySelectorAll('.rankWhere').forEach(el => { el.textContent = rankWhere(); });
+}
+
+// 점수 등록. 온라인이면 내 최고 기록만 덮어씀
+async function submitScore(entry) {
+  if (isOnline() && online.canWrite) {
+    try {
+      const ref = online.db.collection('scores').doc(online.uid);
+      const cur = await ref.get();
+      const old = cur.exists ? cur.data() : null;
+      if (!old || sortRank(entry, old) < 0) await ref.set(entry);
+      else if (old.name !== entry.name) await ref.update({ name: entry.name });
+      return { ok: true };
+    } catch (e) {
+      if (e && e.code === 'invalid_argument') online.canWrite = false;
+      return { ok: false, code: e && e.code };
+    }
+  }
+  const list = getLocalRanking();
+  list.push(entry);
+  list.sort(sortRank);
+  const top = list.slice(0, 10);
+  saveLocalRanking(top);
+  localHi = top.indexOf(entry);
+  return { ok: true, local: true };
+}
+
+function restartGame() { localHi = -1; resetGame(); setSpeed(1); $('pauseBtn').textContent = '⏸'; syncAutoBtn(); }
 
 function showResult(title, msg, win) {
-  const result = { score: S.score, wave: S.wave, win, cheat: !!S.cheated };
+  const result = { score: S.score, wave: S.wave, win, cheat: !!S.cheated, time: Date.now() };
   const best = Math.max(getBest(), S.score); setBest(best);
-  const list = getRanking();
+  const list = currentRanking().filter(r => !isOnline() || r.uid !== online.uid);
   const place = list.filter(r => r.score > result.score).length + 1;
-  const inTop = place <= 10;
+  const canSave = isOnline() ? online.canWrite : place <= 10;
+  const head = isOnline()
+    ? (online.canWrite ? `<span style="color:#db2777">🌐 지금 기록이면 온라인 ${place}위예요! 이름을 남겨 주세요</span>`
+                       : '<span class="rankMsg">온라인 순위에 올리려면 이 게임의 주인에게 \'편집자\'로 초대받아야 해요</span>')
+    : (place <= 10 ? `<span style="color:#db2777">🎉 ${place}위 기록이에요! 이름을 남겨 주세요</span>` : '아쉽게도 10위 안에 못 들었어요');
   showOverlay(title, `${msg}<br>점수 <b>${S.score.toLocaleString()}</b> · 최고 점수 <b>${best.toLocaleString()}</b><br>
-    ${inTop ? `<span style="color:#db2777">🎉 ${place}위 기록이에요! 이름을 남겨 주세요</span>` : '아쉽게도 10위 안에 못 들었어요'}
-    ${inTop ? `<div class="nameRow"><input id="nameInput" maxlength="10" placeholder="이름 (10자까지)" value="${esc(getName())}"></div>` : ''}
-    ${rankingTable(list, -1, 5)}
-    ${inTop ? '<button class="linkBtn" id="skipBtn">등록 안 하고 다시 하기</button>' : ''}`,
-    inTop ? '🏆 순위 등록' : '다시 하기', () => {
-      if (!inTop) return restartGame();
-      const name = ($('nameInput').value || '').trim() || '이름없음';
+    ${head}
+    ${canSave ? `<div class="nameRow"><input id="nameInput" maxlength="10" placeholder="이름 (10자까지)" value="${esc(getName())}"></div>` : ''}
+    ${rankBlock(5)}<span class="rankNote rankWhere">${rankWhere()}</span>
+    ${canSave ? '<button class="linkBtn" id="skipBtn">등록 안 하고 다시 하기</button>' : ''}`,
+    canSave ? '🏆 순위 등록' : '다시 하기', async () => {
+      if (!canSave) return restartGame();
+      const name = ($('nameInput').value || '').trim().slice(0, 10) || '이름없음';
       setName(name);
-      const idx = addRanking({ ...result, name, time: Date.now() });
-      showOverlay('🏆 순위표', rankingTable(getRanking(), idx), '다시 하기', restartGame);
+      showOverlay('🏆 순위표', '<table class="rank"><tr><td class="empty">등록하는 중...</td></tr></table>', '다시 하기', restartGame);
+      $('ovBtn').disabled = true;
+      const res = await submitScore({ ...result, name });
+      $('ovBtn').disabled = false;
+      $('ovText').innerHTML = `${res.ok ? '' : `<div class="rankMsg">${res.code === 'invalid_argument' ? '순위를 올릴 권한이 없어요. 게임 주인에게 \'편집자\'로 초대해 달라고 하세요' : '지금은 등록하지 못했어요. 잠시 뒤 다시 해 보세요'}</div>`}
+        ${rankBlock(10)}<span class="rankNote rankWhere">${rankWhere()}</span>`;
     });
-  if (inTop) {
+  if (canSave) {
     const inp = $('nameInput');
     setTimeout(() => { inp.focus(); inp.select(); }, 50);
     inp.onkeydown = ev => { ev.stopPropagation(); if (ev.key === 'Enter') $('ovBtn').click(); };
@@ -1338,7 +1424,7 @@ function gameOver() {
 $('rankBtn').onclick = () => {
   const wasPaused = S.paused;
   S.paused = true;
-  showOverlay('🏆 순위표', `${rankingTable(getRanking())}<span style="font-size:13px;color:#64748b">이 기기(브라우저)에 저장된 기록이에요 · 💰∞ = 돈 무한 코드 사용</span>`, '닫기', () => { S.paused = wasPaused; });
+  showOverlay('🏆 순위표', `${rankBlock(10)}<span class="rankNote rankWhere">${rankWhere()}</span><span class="rankNote">💰∞ = 돈 무한 코드 사용</span>`, '닫기', () => { S.paused = wasPaused; });
 };
 
 // ================= 루프 =================
@@ -1360,8 +1446,9 @@ showOverlay('🏰 디펜스 게임 ✨',
   `귀여운 슬라임 군단이 성으로 몰려와요!<br>
    <b>20종의 타워</b>로 막아내세요!<br>
    ${TOWER_LIST.map(d => d.icon).join(' ')}<br>
-   총 <b>100 웨이브</b> · 5웨이브마다 👑 보스<br>🦇 박쥐 · 💚 힐러 · 🫧 분열 · 🛡️ 기사 · 👻 유령 · 💪 트롤 · 💨 돌진 등장!<br>🏆 TOP 3${rankingTable(getRanking(), -1, 3)}`,
+   총 <b>100 웨이브</b> · 5웨이브마다 👑 보스<br>🦇 박쥐 · 💚 힐러 · 🫧 분열 · 🛡️ 기사 · 👻 유령 · 💪 트롤 · 💨 돌진 등장!<br>🏆 TOP 3${rankBlock(3)}<span class="rankNote rankWhere">${rankWhere()}</span>`,
   '게임 시작!', () => {});
+initOnline();
 requestAnimationFrame(loop);
 </script>
 </body>
